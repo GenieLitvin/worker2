@@ -14,12 +14,6 @@ npm start
 ```
 
 
-### To compile TypeScript into JavaScript:
-```bash
-npm run build
-```
-
-
 ### Queue Functionality
 
 
