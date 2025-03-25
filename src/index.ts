@@ -1,5 +1,4 @@
-import { createAsyncWorkerQueue } from './types';
-import { Queue } from './queue';
+import { createAsyncWorkerQueue, Queue } from './queue';
 
 const workerFunction = async (value: number) => {
     const duration = Math.random() * 1000 * value;
