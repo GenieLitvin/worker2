@@ -73,7 +73,6 @@ export class Queue<T> {
         const { task, callback } = this.queue.shift()!;
 
         try {
-            console.log('addedNewWorker #', this.activeWorkers, 'task #', task);
             await this.workerFunction(task);
             callback?.();
         } catch (error) {
