@@ -11,21 +11,20 @@ export class Queue<T> {
     constructor(workerFunction: WorkerFunktion<T>, concurrency: number) {
         if (concurrency < 1) {
             throw new Error('Concurrency must be at least 1');
-
         }
         this.workerFunction = workerFunction;
         this.maxConcurrency = concurrency;
     }
 
-    push(task: T, callback?:()=>void): void {
-        this.queue.push({task, callback});
+    push(task: T, callback?: () => void): void {
+        this.queue.push({ task, callback });
         this.processNext();
     }
 
     async waitForAll(): Promise<void> {
         if (this.isEmpty() && this.activeWorkers === 0) {
-            return; 
-        }        
+            return;
+        }
         return new Promise<void>((resolve) => {
             this.waitingResolvers.push(resolve);
         });
@@ -50,7 +49,11 @@ export class Queue<T> {
         }
     }
     private async processNext(): Promise<void> {
-        if (this.isPaused || this.activeWorkers >= this.maxConcurrency || this.isEmpty()) {
+        if (
+            this.isPaused ||
+            this.activeWorkers >= this.maxConcurrency ||
+            this.isEmpty()
+        ) {
             return;
         }
 
@@ -58,7 +61,7 @@ export class Queue<T> {
         const { task, callback } = this.queue.shift()!;
 
         try {
-            console.log('addedNewWorker #',this.activeWorkers, 'task #', task);
+            console.log('addedNewWorker #', this.activeWorkers, 'task #', task);
             await this.workerFunction(task);
             callback?.();
         } catch (error) {
@@ -66,7 +69,7 @@ export class Queue<T> {
         } finally {
             this.activeWorkers--;
             this.processNext();
-            
+
             if (this.isEmpty() && this.activeWorkers === 0) {
                 this.resolveWaiters();
             }

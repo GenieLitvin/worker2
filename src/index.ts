@@ -1,4 +1,4 @@
-import { createAsyncWorkerQueue } from './queue-factory';
+import { createAsyncWorkerQueue } from './types';
 import { Queue } from './queue';
 
 const workerFunction = async (value: number) => {
@@ -10,7 +10,11 @@ const workerFunction = async (value: number) => {
 async function main() {
     const CONCURRENCY = 3;
     // Create a queue for an async worker function with 3 concurrent workers
-    const queue = createAsyncWorkerQueue<number>(Queue, workerFunction, CONCURRENCY);
+    const queue = createAsyncWorkerQueue<number>(
+        Queue,
+        workerFunction,
+        CONCURRENCY,
+    );
     // Add some data to the queue
     queue.push(10, () => console.log('10 done'));
     queue.push(9, () => console.log('9 done'));
@@ -26,7 +30,6 @@ async function main() {
     // Wait until all workers finished
     await queue.waitForAll();
     console.log('All done!');
-
 }
 
 main();
