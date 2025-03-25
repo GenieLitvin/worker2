@@ -1,147 +1,116 @@
 Q:  How can errors be handled in different ways?
 A:
-- Task-Specific Error Callbacks
-- Global Error Handling
+- Typed error handling
 - Task Retry Logic
-- Error Collection and Reporting
-- Error Bubbling via waitForAll()
+- Event-based error notifications
+- Dead letter queue for failed tasks
+- Custom error handling callbacks
 
-#. Task-Specific Error Callbacks
-
-```
-interface QueueItem<T> {
-  task: T;
-  onSuccess?: () => void;
-  onError?: (error: Error) => void;
-}
-
- Promise.resolve()
-        .then(() => this.workerFunction(task))
-        .then(() => {
-          if (onSuccess) {
-            onSuccess();
-          }
-          // ...existing code...
-        })
-        .catch((error) => {
-          if (onError) {
-            onError(error);
-          } else {
-            console.error('Worker function error:', error);
-          }
+#. Typed error handling
 
 ```
-
-#. Global Error Handling
-
-```
-export class InMemoryAsyncWorkerQueue<T> implements AsyncWorkerQueue<T> {
-  // ...existing code...
-  private errorHandler?: (error: Error, task: T) => void;
-  
-  setErrorHandler(handler: (error: Error, task: T) => void): void {
-    this.errorHandler = handler;
-  }
-  
-   // ...in processQueue() catch block:
-  .catch((error) => {
-    if (queueItem.onError) {
-      queueItem.onError(error);
-    } else if (this.errorHandler) {
-      this.errorHandler(error, queueItem.task);
-    } else {
-      console.error('Worker function error:', error);
+const errorHandler: ErrorHandler<number> = async (error, task) => {
+    console.error(`Task ${task} failed:`, error.message);
+    if (error.originalError) {
+        console.error('Original error:', error.originalError);
     }
-    this.activeWorkers--;
-    this.processQueue();
-  });
+};
+
+const queue = new Queue<number>(workerFunction, 3, errorHandler);
+
 ```
+
 #. Task Retry Logic
 
+```
+export class Queue<T> {
+    private maxRetries = 3;
+    private retryDelay = 1000; // ms
+
+    private async processWithRetry(task: T, attempt = 1): Promise<void> {
+        try {
+            await this.workerFunction(task);
+        } catch (error) {
+            if (attempt < this.maxRetries) {
+                const delay = this.retryDelay * Math.pow(2, attempt - 1);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                return this.processWithRetry(task, attempt + 1);
+            }
+            throw error;
+        }
+    }
+
+    private async processNext(): Promise<void> {
+        // ...existing code...
+        try {
+            await this.processWithRetry(task);
+            callback?.();
+        } catch (error) {
+            // ...error handling...
+        }
+    }
+}
+```
+#. Event-based error notifications
+
 ``` 
-interface QueueItem<T> {
-  task: T;
-  retries?: number;
-  onSuccess?: () => void;
-  onError?: (error: Error) => void;
+import { EventEmitter } from 'events';
+
+export class Queue<T> extends EventEmitter {
+    constructor(workerFunction: WorkerFunktion<T>, concurrency: number) {
+        super();
+        // ...existing code...
+    }
+
+    private async processNext(): Promise<void> {
+        // ...existing code...
+        try {
+            await this.workerFunction(task);
+            this.emit('taskComplete', task);
+        } catch (error) {
+            this.emit('taskError', new QueueError('Task failed', task, error as Error));
+        }
+    }
 }
 
-// ...in processQueue() catch block:
-  .catch((error) => {
-    if (queueItem.retriesLeft > 0) {
-      console.warn(`Retrying task. Attempts left: ${queueItem.retriesLeft - 1}`);
-      this.queue.push({
-        ...queueItem,
-        retriesLeft: queueItem.retriesLeft - 1
-      });
-    } else if (queueItem.onError) {
-      queueItem.onError(error);
-    } else {
-      console.error('Worker function error:', error);
-    }
-    this.activeWorkers--;
-    this.processQueue();
-  });
-
 ```
 
-#. Error Collection and Reporting
+#. Dead letter queue for failed tasks
 
 ```
-export class InMemoryAsyncWorkerQueue<T> implements AsyncWorkerQueue<T> {
-  // ...existing code...
-  private errors: Array<{error: Error, task: T}> = [];
-  
-  getErrors(): Array<{error: Error, task: T}> {
-    return [...this.errors];
-  }
-  
-  clearErrors(): void {
-    this.errors = [];
-  }
-  
-  // ...in processQueue() catch block:
-  .catch((error) => {
-    this.errors.push({ error, task: queueItem.task });
-    // ...existing error handling...
-    this.activeWorkers--;
-    this.processQueue();
-  });
+interface FailedTask<T> {
+    task: T;
+    error: Error;
+    timestamp: Date;
+    attempts: number;
+}
 
-```
-#. Error Bubbling via waitForAll()
+export class Queue<T> {
+    private deadLetterQueue: FailedTask<T>[] = [];
 
-```
-export class InMemoryAsyncWorkerQueue<T> implements AsyncWorkerQueue<T> {
-  // ...existing code...
-  private errors: Array<{error: Error, task: T}> = [];
-  
-  waitForAll(): Promise<void> {
-    if (this.isEmpty()) {
-      if (this.errors.length > 0) {
-        return Promise.reject(new AggregateError(
-          this.errors.map(e => e.error),
-          'Tasks completed with errors'
-        ));
-      }
-      return Promise.resolve();
-    }
-    
-    return new Promise<void>((resolve, reject) => {
-      this.resolvers.push(() => {
-        if (this.errors.length > 0) {
-          reject(new AggregateError(
-            this.errors.map(e => e.error),
-            'Tasks completed with errors'
-          ));
-        } else {
-          resolve();
+    private async processNext(): Promise<void> {
+        // ...existing code...
+        try {
+            await this.workerFunction(task);
+        } catch (error) {
+            if (error instanceof Error) {
+                this.deadLetterQueue.push({
+                    task,
+                    error,
+                    timestamp: new Date(),
+                    attempts: 1
+                });
+            }
         }
-      });
-    });
-  }
+    }
 
-  ```
+    getFailedTasks(): FailedTask<T>[] {
+        return [...this.deadLetterQueue];
+    }
+}
+
+
+
 
 Q: What other functionalities of the queue would be useful?
 
@@ -186,10 +155,6 @@ Set timeouts for individual tasks
 
 Handle stalled tasks
 
-### Drain functionality
-
-drain() method to complete current tasks but reject new ones
-
 ### Statistics and monitoring
 
 Track average processing time
@@ -198,14 +163,7 @@ Count successes/failures
 
 Implement getStats() method
 
-### Graceful shutdown
-
-Method to properly finish critical tasks before shutting down
 
 ### Task filtering
 
 Find or filter tasks based on criteria
-
-### Middleware support
-
-Add pre/post processing hooks
