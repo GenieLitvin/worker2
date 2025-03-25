@@ -1,4 +1,4 @@
-Q:  How can errors be handled in different ways?
+Q:  How can errors be handled in different ways?\
 A:
 - Typed error handling
 - Task Retry Logic
@@ -8,7 +8,7 @@ A:
 
 #. Typed error handling
 
-```
+```typescript
 const errorHandler: ErrorHandler<number> = async (error, task) => {
     console.error(`Task ${task} failed:`, error.message);
     if (error.originalError) {
@@ -22,7 +22,7 @@ const queue = new Queue<number>(workerFunction, 3, errorHandler);
 
 #. Task Retry Logic
 
-```
+```typescript
 export class Queue<T> {
     private maxRetries = 3;
     private retryDelay = 1000; // ms
@@ -53,7 +53,7 @@ export class Queue<T> {
 ```
 #. Event-based error notifications
 
-``` 
+``` typescript
 import { EventEmitter } from 'events';
 
 export class Queue<T> extends EventEmitter {
@@ -77,7 +77,7 @@ export class Queue<T> extends EventEmitter {
 
 #. Dead letter queue for failed tasks
 
-```
+```typescript
 interface FailedTask<T> {
     task: T;
     error: Error;
@@ -108,8 +108,7 @@ export class Queue<T> {
         return [...this.deadLetterQueue];
     }
 }
-
-
+```
 
 
 Q: What other functionalities of the queue would be useful?
